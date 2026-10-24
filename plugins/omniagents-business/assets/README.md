@@ -1,0 +1,1 @@
+Logo OmniAgents Business basato sul terzo asset scelto dal proprietario. Su sua richiesta, una modifica con ImageGen ha ingrandito il logo per allineare il bordo fluorescente al quadrato, riducendo i margini. Il pacchetto include il risultato della modifica richiesta, senza ulteriori trasformazioni.
