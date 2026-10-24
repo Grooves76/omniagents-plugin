@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "omniagents": {
+      "command": "/bin/sh",
+      "args": [
+        "${PLUGIN_ROOT}/bin/launch.sh"
+      ],
+      "startup_timeout_sec": 300
+    }
+  }
+}
