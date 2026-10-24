@@ -1,0 +1,35 @@
+{
+  "name": "omniagents-business",
+  "version": "0.1.0",
+  "description": "Collega ChatGPT desktop alla tua installazione OmniAgents Business.",
+  "author": {
+    "name": "OmniAgents",
+    "email": "info@omniagents.it",
+    "url": "https://omniagents.it/"
+  },
+  "homepage": "https://omniagents.it/",
+  "repository": "https://github.com/Grooves76/omniagents-plugin",
+  "keywords": [
+    "omniagents",
+    "mcp",
+    "memory",
+    "productivity",
+    "business"
+  ],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "OmniAgents Business",
+    "shortDescription": "La tua AI, le fonti Business",
+    "longDescription": "Collega ChatGPT desktop alla tua installazione OmniAgents Business, con accesso alle fonti e agli strumenti autorizzati. Richiede una versione OmniAgents Business compatibile con OAuth desktop.",
+    "developerName": "OmniAgents",
+    "category": "Productivity",
+    "capabilities": [],
+    "websiteURL": "https://omniagents.it/",
+    "defaultPrompt": [
+      "Apri OmniAgents Business e verifica la sessione corrente."
+    ],
+    "logo": "./assets/logo.png",
+    "composerIcon": "./assets/logo.png",
+    "logoDark": "./assets/logo.png"
+  }
+}
