@@ -11,7 +11,7 @@ import base64
 from contextlib import contextmanager
 import ctypes
 from ctypes import c_char_p, c_int32, c_uint32, c_void_p, POINTER, byref
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
@@ -173,6 +173,13 @@ class Response:
     body: bytes
 
 
+@dataclass(frozen=True)
+class AccessCredential:
+    token: str = field(repr=False)
+    client_id: str
+    resource: str
+
+
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         # In particular never forward a Bearer token or refresh token to a redirect.
@@ -299,12 +306,16 @@ class OAuthClient:
         return json_body(response)
 
     def access_token(self, force_used=None):
+        return self.access_credential(force_used=force_used).token
+
+    def access_credential(self, force_used=None):
+        """Return the token and its identity from one locked grant snapshot."""
         with exclusive_lock(self.state_dir, self.lock_name):
             saved = self.store.load()
             if saved:
                 saved = self._validate_grant(saved)
                 if saved["expires_at"] > self.clock() + 90 and (force_used is None or saved["access_token"] != force_used):
-                    return saved["access_token"]
+                    return AccessCredential(saved["access_token"], saved["client_id"], saved["resource"])
                 try:
                     result = self._token_request({"grant_type": "refresh_token", "refresh_token": saved["refresh_token"], "client_id": saved["client_id"], "resource": self.endpoint})
                     grant = self._token_result(result, saved["client_id"], saved)
@@ -317,7 +328,7 @@ class OAuthClient:
             else:
                 grant = self._authorize()
             self.store.save(grant)
-            return grant["access_token"]
+            return AccessCredential(grant["access_token"], grant["client_id"], grant["resource"])
 
     def _authorize(self):
         meta = self.discovery()
@@ -418,9 +429,20 @@ class Bridge:
         self.endpoint, self.oauth = validate_endpoint(endpoint), oauth
         self.http = http or HTTPClient()
         self.session_id = self.protocol = None
+        self.connection_identity = None
+        self._verification_identity = None
+        self._verifying = False
 
     def verify_connection(self):
         """Authenticate and read the catalog, without invoking or activating an AI."""
+        self.connection_identity = self._verification_identity = None
+        self._verifying = True
+        try:
+            return self._verify_connection()
+        finally:
+            self._verifying = False
+
+    def _verify_connection(self):
         initialized = self.forward({"jsonrpc": "2.0", "id": "connect-init", "method": "initialize", "params": {
             "protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "OmniAgents ChatGPT desktop plugin", "version": "0.1"}}})
         result = next((item.get("result") for item in initialized if item.get("id") == "connect-init"), None)
@@ -440,6 +462,8 @@ class Bridge:
                 names.add(tool["name"])
             cursor = catalog.get("nextCursor")
             if not cursor:
+                client_id, resource = self._verification_identity
+                self.connection_identity = {"client_id": client_id, "resource_sha256": hashlib.sha256(resource.encode()).hexdigest()}
                 return len(names)
             if not isinstance(cursor, str) or len(cursor) > 2048:
                 raise BridgeError("MCP_CATALOG_INVALID")
@@ -448,16 +472,23 @@ class Bridge:
     def forward(self, message):
         if not isinstance(message, dict) or message.get("jsonrpc") != "2.0" or not isinstance(message.get("method"), str):
             raise BridgeError("MCP_REQUEST_INVALID")
-        token = self.oauth.access_token()
+        credential = self.oauth.access_credential()
         for attempt in range(2):
-            headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream", "Authorization": "Bearer " + token}
+            if credential.resource != self.endpoint or not isinstance(credential.client_id, str) or not credential.client_id:
+                raise BridgeError("MCP_CREDENTIAL_IDENTITY_INVALID")
+            if self._verifying:
+                identity = (credential.client_id, credential.resource)
+                if self._verification_identity is not None and self._verification_identity != identity:
+                    raise BridgeError("MCP_CREDENTIAL_IDENTITY_CHANGED")
+                self._verification_identity = identity
+            headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream", "Authorization": "Bearer " + credential.token}
             if self.session_id:
                 headers["Mcp-Session-Id"] = self.session_id
             if self.protocol:
                 headers["MCP-Protocol-Version"] = self.protocol
             response = self.http.request("POST", self.endpoint, headers, json.dumps(message, separators=(",", ":")).encode())
             if response.status == 401 and attempt == 0:
-                token = self.oauth.access_token(force_used=token)
+                credential = self.oauth.access_credential(force_used=credential.token)
                 continue
             if not 200 <= response.status < 300:
                 raise BridgeError("MCP_HTTP_ERROR_" + str(response.status))
@@ -515,7 +546,7 @@ def main():
         local = Bridge(installation.endpoint, oauth)
         if options.connect:
             count = local.verify_connection()
-            print(json.dumps({"status": "connected", "instance": options.instance, "tool_count": count, "active_model_changed": False}))
+            print(json.dumps({"status": "connected", "instance": options.instance, "tool_count": count, "active_model_changed": False, **local.connection_identity}))
         else:
             local.serve(sys.stdin, sys.stdout)
         return 0
