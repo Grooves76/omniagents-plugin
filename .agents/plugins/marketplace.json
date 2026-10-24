@@ -1,0 +1,20 @@
+{
+  "name": "omniagents",
+  "interface": {
+    "displayName": "OmniAgents"
+  },
+  "plugins": [
+    {
+      "name": "omniagents",
+      "source": {
+        "source": "local",
+        "path": "./plugins/omniagents"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
