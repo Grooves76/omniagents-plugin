@@ -11,6 +11,7 @@ import sys
 import tempfile
 import threading
 import time
+from types import SimpleNamespace
 import unittest
 from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import urlopen
@@ -295,6 +296,7 @@ class BridgeTests(unittest.TestCase):
     def test_streaming_response_preserves_active_model_error(self):
         class Token:
             def access_token(self, force_used=None): return "private-token"
+            def access_credential(self, force_used=None): return SimpleNamespace(token="private-token", client_id="client-for-this-session", resource=ENDPOINT)
         class API:
             def request(self, method, url, headers=None, body=None):
                 self.headers = headers
@@ -308,6 +310,7 @@ class BridgeTests(unittest.TestCase):
     def test_explicit_connect_verifies_catalog_without_calling_tools_or_activating_ai(self):
         class Token:
             def access_token(self, force_used=None): return "test-token"
+            def access_credential(self, force_used=None): return SimpleNamespace(token="test-token", client_id="client-for-this-session", resource=ENDPOINT)
         class API:
             def __init__(self): self.methods = []
             def request(self, method, url, headers=None, body=None):
@@ -321,10 +324,28 @@ class BridgeTests(unittest.TestCase):
         local = bridge.Bridge(ENDPOINT, Token(), http=api)
         self.assertEqual(local.verify_connection(), 2)
         self.assertEqual(api.methods, ["initialize", "notifications/initialized", "tools/list"])
+        self.assertEqual(local.connection_identity, {"client_id": "client-for-this-session", "resource_sha256": hashlib.sha256(ENDPOINT.encode()).hexdigest()})
+
+    def test_connect_rejects_client_change_between_initialize_and_catalog(self):
+        class Token:
+            def __init__(self): self.calls = 0
+            def access_token(self, force_used=None): return "test-token"
+            def access_credential(self, force_used=None):
+                self.calls += 1
+                return SimpleNamespace(token="test-token", client_id="owner-A-client" if self.calls == 1 else "owner-B-client", resource=ENDPOINT)
+        class API:
+            def request(self, method, url, headers=None, body=None):
+                request = json.loads(body)
+                if request["method"] == "notifications/initialized": return bridge.Response(202, {}, b"")
+                result = {"protocolVersion": "2025-11-25", "serverInfo": {"name": "omniagents_core"}} if request["method"] == "initialize" else {"tools": [{"name": "omniagents_session"}]}
+                return bridge.Response(200, {}, json.dumps({"jsonrpc": "2.0", "id": request["id"], "result": result}).encode())
+        with self.assertRaisesRegex(bridge.BridgeError, "CREDENTIAL_IDENTITY_CHANGED"):
+            bridge.Bridge(ENDPOINT, Token(), http=API()).verify_connection()
 
     def test_explicit_connect_does_not_report_connected_for_rejected_catalog(self):
         class Token:
             def access_token(self, force_used=None): return "test-token"
+            def access_credential(self, force_used=None): return SimpleNamespace(token="test-token", client_id="client-for-this-session", resource=ENDPOINT)
         class API:
             def request(self, method, url, headers=None, body=None):
                 return bridge.Response(200, {"content-type": "application/json"}, b'{"jsonrpc":"2.0","id":"connect-init","error":{"code":-32001,"message":"authorization required"}}')
