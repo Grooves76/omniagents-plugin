@@ -43,3 +43,7 @@ Questa anteprima riguarda il client desktop locale su macOS. La pubblicazione su
 Il marketplace è in `.agents/plugins/marketplace.json`; il pacchetto è in `plugins/omniagents`. Il manifest portabile e quello di compatibilità desktop condividono nome, versione, sito, contatti e logo.
 
 I test del bridge sono in `plugins/omniagents/tests`. Non utilizzare credenziali reali nei test o aggiungerle al repository.
+
+## OmniAgents Business
+
+Il marketplace include anche **[OmniAgents Business](plugins/omniagents-business/README.md)** (`omniagents-business@omniagents`, versione `0.1.0`), con logo Business e contorno fluorescente azzurro. Seleziona questa voce per collegare l’installazione Business. Endpoint e autorizzazione sono separati dal plugin Personal; il collegamento conserva l’AI attiva scelta nell’app. Il catalogo effettivo Business viene letto dal suo Core dopo OAuth e non è dedotto dal conteggio Personal.
